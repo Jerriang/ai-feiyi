@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>{{ title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
+  <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+  <style>
+    html, body { overflow-x: hidden; background: #F9F6F0; }
+    .cloud-bg { background: radial-gradient(circle at center, rgba(196,60,60,.18), transparent 45%), #F9F6F0; }
+    .ripple { position:absolute; border-radius:9999px; transform:scale(0); animation:ripple .45s ease-out; background:rgba(196,60,60,.22); pointer-events:none; }
+    @keyframes ripple { to { transform:scale(12); opacity:0; } }
+    .window-pattern { background-image: linear-gradient(90deg, rgba(196,60,60,.08) 1px, transparent 1px), linear-gradient(rgba(196,60,60,.08) 1px, transparent 1px); background-size: 20px 20px; }
+  </style>
+</head>
+<body class="h-full text-gray-800">
+  <div id="loadingOverlay" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#F9F6F0] window-pattern">
+    <lottie-player src="https://assets4.lottiefiles.com/packages/lf20_zrqthn6o.json" background="transparent" speed="1" style="width:180px;height:180px" loop autoplay></lottie-player>
+    <p class="mt-3 text-sm text-[#C43C3C]">非遗纹样编织中...</p>
+  </div>
+
+  <div class="relative min-h-screen pb-24 cloud-bg">
+    <header class="px-5 pt-6">
+      <div class="mx-auto max-w-md rounded-2xl border border-[#E7E2D9] bg-white/90 p-4 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div>
+            <p class="text-xs tracking-[0.2em] text-[#C43C3C]">AI 非遗导览平台</p>
+            <h1 id="heroTitle" class="mt-2 text-3xl font-bold text-[#C43C3C]"></h1>
+            <p class="mt-2 text-sm text-gray-600">看懂非遗 · 逛懂非遗 · 分享非遗</p>
+          </div>
+          <button id="muteBtn" class="rounded-lg border border-[#E7E2D9] px-2 py-1 text-sm">🔊</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto mt-5 max-w-md px-5">
+      <section class="rounded-3xl border border-[#E7E2D9] bg-white/90 p-5 shadow-sm">
+        <div class="mb-3 flex items-end justify-between">
+          <h2 class="text-xl font-semibold">今日推荐</h2>
+          <a href="/themes" class="text-sm text-[#C43C3C]">查看全部</a>
+        </div>
+
+        <div class="swiper mySwiper overflow-hidden rounded-2xl">
+          <div class="swiper-wrapper">
+            {% for item in items %}
+            <article class="swiper-slide heritage-card relative h-64 rounded-2xl border border-[#E7E2D9] bg-gradient-to-br from-white to-rose-50 p-4" data-id="{{ item.id }}">
+              <img src="{{ item.image_url or 'https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=1200&q=80' }}" class="card-img h-28 w-full rounded-xl object-cover" />
+              <p class="mt-2 text-xs text-[#C43C3C]">{{ item.city }} · {{ item.category }}</p>
+              <h3 class="mt-1 text-2xl font-bold">{{ item.name }}</h3>
+              <p class="mt-2 line-clamp-3 text-sm text-gray-600">{{ item.summary }}</p>
+              <button class="fx-btn open-detail absolute bottom-3 right-3 rounded-lg bg-[#C43C3C] px-3 py-2 text-xs font-semibold text-white">沉浸浏览</button>
+            </article>
+            {% endfor %}
+          </div>
+          <div class="mt-3 text-center"><div class="swiper-pagination !static"></div></div>
+        </div>
+      </section>
+
+      <section class="mt-4 grid grid-cols-2 gap-3">
+        <a href="/guide" class="fx-btn relative overflow-hidden rounded-2xl border border-[#E7E2D9] bg-white p-4"><p class="text-xs text-gray-500">故事导览</p><p class="mt-1 font-semibold">开始导览</p></a>
+        <a href="/route" class="fx-btn relative overflow-hidden rounded-2xl border border-[#E7E2D9] bg-white p-4"><p class="text-xs text-gray-500">路线推荐</p><p class="mt-1 font-semibold">智能规划</p></a>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+  <script>
+    // 埋点
+    const sessionId = localStorage.getItem('analytics_session_id') || (() => { const v = `sess_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; localStorage.setItem('analytics_session_id', v); return v; })();
+    fetch('/api/v1/analytics/track', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ event_name:'page_view', properties:{ page_name:'index' }, user_id:Number(localStorage.getItem('demo_user_id')||1), session_id:sessionId }) }).catch(()=>{});
+
+    const sounds = {
+      click: new Howl({ src: ['https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8f4b9de4d.mp3?filename=wood-click-102440.mp3'], volume: 0.5 }),
+      switch: new Howl({ src: ['https://cdn.pixabay.com/download/audio/2022/03/15/audio_634166040b.mp3?filename=page-flip-110402.mp3'], volume: 0.45 }),
+      success: new Howl({ src: ['https://cdn.pixabay.com/download/audio/2022/03/15/audio_4aa6c6f7db.mp3?filename=bell-110430.mp3'], volume: 0.5 }),
+      droplet: new Howl({ src: ['https://cdn.pixabay.com/download/audio/2022/03/15/audio_dca3d8bf57.mp3?filename=water-drop-110429.mp3'], volume: 0.35 })
+    };
+    let muted = localStorage.getItem('sound_muted') === '1';
+    Howler.mute(muted);
+    const muteBtn = document.getElementById('muteBtn');
+    muteBtn.textContent = muted ? '🔇' : '🔊';
+    muteBtn.onclick = () => { muted = !muted; Howler.mute(muted); localStorage.setItem('sound_muted', muted ? '1' : '0'); muteBtn.textContent = muted ? '🔇' : '🔊'; };
+
+    // 入场动画：云纹扩散 + 标题逐字
+    const title = '遗境焕活'.split('');
+    const heroTitle = document.getElementById('heroTitle');
+    heroTitle.innerHTML = title.map(c => `<span class="inline-block opacity-0">${c}</span>`).join('');
+    gsap.fromTo('.cloud-bg', { backgroundSize: '20% 20%' }, { backgroundSize: '180% 180%', duration: 1.2, ease: 'power2.out' });
+    gsap.to('#heroTitle span', { y: 0, opacity: 1, stagger: 0.08, duration: 0.45, ease: 'power2.out' });
+
+    new Swiper('.mySwiper', { effect:'coverflow', centeredSlides:true, slidesPerView:1.12, spaceBetween:12, coverflowEffect:{ rotate:14, depth:120, slideShadows:false }, pagination:{ el:'.swiper-pagination', clickable:true } });
+
+    // 加载艺术
+    window.addEventListener('load', () => setTimeout(() => gsap.to('#loadingOverlay', { opacity:0, duration:0.35, onComplete(){ document.getElementById('loadingOverlay').remove(); sounds.success.play(); } }), 500));
+
+    // 按钮微交互：涟漪 + 水滴音
+    document.querySelectorAll('.fx-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const r = document.createElement('span');
+        r.className = 'ripple';
+        r.style.left = `${e.offsetX}px`; r.style.top = `${e.offsetY}px`; r.style.width = r.style.height = '12px';
+        btn.appendChild(r); setTimeout(() => r.remove(), 460);
+        sounds.droplet.play(); sounds.click.play();
+      });
+    });
+
+    // 共享过渡：卡片飞到详情页
+    document.querySelectorAll('.open-detail').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const card = btn.closest('.heritage-card');
+        const img = card.querySelector('.card-img');
+        const rect = img.getBoundingClientRect();
+        const id = card.dataset.id;
+        localStorage.setItem('heritage_transition', JSON.stringify({ id: Number(id), left: rect.left, top: rect.top, width: rect.width, height: rect.height, img: img.src }));
+        sounds.switch.play();
+        setTimeout(() => location.href = `/heritage/${id}`, 120);
+      });
+    });
+  </script>
+</body>
+</html>

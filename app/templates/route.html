@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>路线推荐</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+
+    const sessionId = localStorage.getItem('analytics_session_id') || (() => { const v = `sess_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; localStorage.setItem('analytics_session_id', v); return v; })();
+    fetch('/api/v1/analytics/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event_name: 'page_view', properties: { page_name: 'route' }, user_id: Number(localStorage.getItem('demo_user_id') || 1), session_id: sessionId })
+    }).catch(() => {});
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { cinnabar: '#C43C3C', rice: '#F9F6F0', line: '#E7E2D9' },
+          fontFamily: {
+            serifCn: ['"Noto Serif SC"', 'serif'],
+            sansCn: ['Inter', '"PingFang SC"', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .nice-range {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #C43C3C 0%, #e5b6b6 100%);
+      outline: none;
+    }
+    .nice-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #C43C3C;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      cursor: pointer;
+    }
+    .nice-range::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #C43C3C;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-rice font-sansCn text-gray-800 overflow-x-hidden">
+  <main class="mx-auto max-w-md px-4 pb-28 pt-6">
+    <h1 class="font-serifCn text-3xl font-bold text-cinnabar">为你定制非遗之旅</h1>
+    <p class="mt-2 text-sm text-gray-600">选择偏好，系统将生成可执行路线。</p>
+
+    <section class="mt-5 space-y-5 rounded-2xl border border-cinnabar/40 bg-white p-4 shadow-sm">
+      <div>
+        <label class="text-sm font-semibold">预计停留时间：<span id="durationLabel">2小时</span></label>
+        <input id="durationRange" type="range" min="1" max="4" value="2" class="nice-range mt-2" />
+        <div class="mt-1 flex justify-between text-xs text-gray-500"><span>1小时</span><span>2小时</span><span>半天</span><span>全天</span></div>
+      </div>
+
+      <div>
+        <label class="text-sm font-semibold">兴趣偏好：<span id="interestLabel">工艺体验</span></label>
+        <input id="interestRange" type="range" min="1" max="3" value="2" class="nice-range mt-2" />
+        <div class="mt-1 flex justify-between text-xs text-gray-500"><span>历史故事</span><span>工艺体验</span><span>拍照打卡</span></div>
+      </div>
+
+      <div>
+        <label class="text-sm font-semibold">出行类型：<span id="travelLabel">亲子</span></label>
+        <input id="travelRange" type="range" min="1" max="3" value="2" class="nice-range mt-2" />
+        <div class="mt-1 flex justify-between text-xs text-gray-500"><span>独自</span><span>亲子</span><span>结伴</span></div>
+      </div>
+
+      <div>
+        <label class="text-sm font-semibold">非遗项目</label>
+        <select id="itemSelect" class="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm">
+          {% for item in items %}
+          <option value="{{ item.id }}">{{ item.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <button id="genBtn" class="w-full rounded-xl bg-cinnabar py-2.5 font-semibold text-white">生成推荐路线</button>
+    </section>
+
+    <section id="resultBox" class="mt-5 hidden">
+      <h2 class="font-serifCn text-xl font-semibold">你的推荐路线</h2>
+      <p id="summary" class="mt-1 text-sm text-gray-600"></p>
+      <div id="timeline" class="mt-4 space-y-3"></div>
+      <a id="startGuideBtn" href="/guide" class="mt-5 block rounded-xl bg-cinnabar py-2.5 text-center font-semibold text-white">按此路线开始导览</a>
+    </section>
+  </main>
+
+  <script>
+    const durationMap = { 1: { label: '1小时', minutes: 60 }, 2: { label: '2小时', minutes: 120 }, 3: { label: '半天', minutes: 240 }, 4: { label: '全天', minutes: 420 } };
+    const interestMap = { 1: { label: '历史故事', preference: 'history' }, 2: { label: '工艺体验', preference: 'interactive' }, 3: { label: '拍照打卡', preference: 'balanced' } };
+    const travelMap = { 1: { label: '独自', value: 'solo' }, 2: { label: '亲子', value: 'family' }, 3: { label: '结伴', value: 'group' } };
+
+    const durationRange = document.getElementById('durationRange');
+    const interestRange = document.getElementById('interestRange');
+    const travelRange = document.getElementById('travelRange');
+    const durationLabel = document.getElementById('durationLabel');
+    const interestLabel = document.getElementById('interestLabel');
+    const travelLabel = document.getElementById('travelLabel');
+    const genBtn = document.getElementById('genBtn');
+    const itemSelect = document.getElementById('itemSelect');
+    const resultBox = document.getElementById('resultBox');
+    const timeline = document.getElementById('timeline');
+    const summary = document.getElementById('summary');
+    const startGuideBtn = document.getElementById('startGuideBtn');
+
+    const syncLabels = () => {
+      durationLabel.textContent = durationMap[durationRange.value].label;
+      interestLabel.textContent = interestMap[interestRange.value].label;
+      travelLabel.textContent = travelMap[travelRange.value].label;
+    };
+    [durationRange, interestRange, travelRange].forEach(el => el.addEventListener('input', syncLabels));
+    syncLabels();
+
+    function nodeCard(node, heritageName) {
+      return `
+        <article class="rounded-2xl border border-cinnabar/60 bg-[#F9F6F0] p-4">
+          <div class="flex items-center gap-3">
+            <div class="h-7 w-7 rounded-full bg-cinnabar text-center text-sm leading-7 text-white">${node.node_order}</div>
+            <div>
+              <p class="text-xs text-gray-500">${heritageName}</p>
+              <h3 class="font-semibold">${node.node_title}</h3>
+            </div>
+          </div>
+          <p class="mt-2 text-sm text-gray-600">建议停留：${node.stay_minutes} 分钟</p>
+          <p class="mt-1 text-sm text-gray-700">推荐理由：${node.reason}</p>
+        </article>
+      `;
+    }
+
+    genBtn.addEventListener('click', async () => {
+      genBtn.disabled = true;
+      genBtn.textContent = '生成中...';
+      const body = {
+        item_id: Number(itemSelect.value),
+        duration: durationMap[durationRange.value].minutes,
+        preference: interestMap[interestRange.value].preference,
+        travel_type: travelMap[travelRange.value].value
+      };
+
+      try {
+        const res = await fetch('/api/v1/routes/recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) throw new Error('推荐失败');
+        const data = await res.json();
+        const heritageName = itemSelect.options[itemSelect.selectedIndex].text;
+        summary.textContent = `总时长约 ${data.total_minutes} 分钟 · ${data.reasoning}`;
+        timeline.innerHTML = data.nodes.map(n => nodeCard(n, heritageName)).join('');
+        resultBox.classList.remove('hidden');
+        startGuideBtn.href = '/guide';
+      } catch (e) {
+        alert('路线生成失败，请稍后重试');
+      } finally {
+        genBtn.disabled = false;
+        genBtn.textContent = '生成推荐路线';
+      }
+    });
+  </script>
+</body>
+</html>

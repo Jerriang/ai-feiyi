@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+heritage_revive.db
+.pytest_cache/
+
+app/static/generated/*.png
