@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AI 导览</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#F9F6F0] text-gray-800 font-sans overflow-x-hidden">
+  <main class="mx-auto flex min-h-screen w-full max-w-md flex-col">
+    <header class="sticky top-0 z-10 border-b border-[#E7E2D9] bg-white/95 px-4 py-3">
+      <h1 class="text-xl font-semibold text-[#C43C3C]">AI 记忆导览</h1>
+      <p class="text-xs text-gray-500">可追问 · 可组队 · 可成长</p>
+    </header>
+
+    <section id="chat" class="flex-1 space-y-3 overflow-y-auto px-4 py-4"></section>
+
+    <footer class="border-t border-[#E7E2D9] bg-white p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+      <div class="grid grid-cols-2 gap-2">
+        <select id="itemSelect" class="rounded-xl border border-[#E7E2D9] bg-white px-3 py-2 text-sm">{% for item in items %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select>
+        <select id="styleSelect" class="rounded-xl border border-[#E7E2D9] bg-white px-3 py-2 text-sm"><option value="历史叙事">历史叙事</option><option value="游客陪伴">游客陪伴</option><option value="儿童科普">儿童科普</option><option value="文艺沉浸">文艺沉浸</option></select>
+      </div>
+
+      <div class="mt-2 grid grid-cols-2 gap-2">
+        <button id="startBtn" class="rounded-xl bg-[#C43C3C] px-3 py-2 text-sm font-semibold text-white">开始导览</button>
+        <button id="createTeamBtn" class="rounded-xl border border-[#E7E2D9] px-3 py-2 text-sm">生成组队码</button>
+      </div>
+      <div class="mt-2 flex gap-2">
+        <input id="teamCodeInput" placeholder="输入组队码" class="flex-1 rounded-xl border border-[#E7E2D9] px-3 py-2 text-sm" />
+        <button id="joinTeamBtn" class="rounded-xl border border-[#E7E2D9] px-3 py-2 text-sm">加入组队</button>
+      </div>
+      <p id="teamInfo" class="mt-1 text-xs text-[#C43C3C]"></p>
+
+      <div class="mt-2 flex gap-2">
+        <input id="questionInput" type="text" placeholder="输入追问：刚才说的云锦织机有几台？" class="flex-1 rounded-xl border border-[#E7E2D9] px-3 py-2 text-sm" />
+        <button id="voiceBtn" class="rounded-xl border border-[#E7E2D9] px-3 py-2 text-sm">🎤</button>
+        <button id="askBtn" class="rounded-xl bg-[#C43C3C] px-3 py-2 text-sm font-semibold text-white">发送</button>
+      </div>
+
+      <p id="status" class="mt-2 text-xs text-gray-500"></p>
+      <button id="posterBtn" class="mt-2 hidden w-full rounded-xl bg-[#C43C3C] px-3 py-2 text-sm font-semibold text-white">生成纪念海报</button>
+      <div id="posterLoading" class="mt-2 hidden text-xs text-gray-500">正在绘制海报中...</div>
+      <section id="posterPreview" class="mt-2 hidden rounded-xl border border-[#E7E2D9] bg-white p-3">
+        <img id="posterImg" class="w-full rounded-lg" alt="海报预览" />
+        <div class="mt-2 grid grid-cols-2 gap-2">
+          <a id="savePosterBtn" download class="rounded-lg bg-[#C43C3C] px-3 py-2 text-center text-xs font-semibold text-white">保存到相册</a>
+          <button id="sharePosterBtn" class="rounded-lg border border-[#E7E2D9] px-3 py-2 text-xs font-semibold">分享</button>
+        </div>
+      </section>
+    </footer>
+  </main>
+
+  <div id="growthModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+    <div class="w-full max-w-sm rounded-2xl bg-white p-4">
+      <h3 class="text-lg font-semibold text-[#C43C3C]">成长提示</h3>
+      <p id="growthText" class="mt-2 text-sm leading-6"></p>
+      <button onclick="document.getElementById('growthModal').classList.add('hidden')" class="mt-3 w-full rounded-xl bg-[#C43C3C] py-2 text-white">知道了</button>
+    </div>
+  </div>
+
+<script>
+  const chat = document.getElementById('chat');
+  const statusText = document.getElementById('status');
+  const itemSelect = document.getElementById('itemSelect');
+  const styleSelect = document.getElementById('styleSelect');
+  const startBtn = document.getElementById('startBtn');
+  const askBtn = document.getElementById('askBtn');
+  const questionInput = document.getElementById('questionInput');
+  const voiceBtn = document.getElementById('voiceBtn');
+  const posterBtn = document.getElementById('posterBtn');
+  const posterLoading = document.getElementById('posterLoading');
+  const posterPreview = document.getElementById('posterPreview');
+  const posterImg = document.getElementById('posterImg');
+  const savePosterBtn = document.getElementById('savePosterBtn');
+  const sharePosterBtn = document.getElementById('sharePosterBtn');
+  const createTeamBtn = document.getElementById('createTeamBtn');
+  const joinTeamBtn = document.getElementById('joinTeamBtn');
+  const teamCodeInput = document.getElementById('teamCodeInput');
+  const teamInfo = document.getElementById('teamInfo');
+
+  const sessionId = localStorage.getItem('analytics_session_id') || (() => { const v = `sess_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; localStorage.setItem('analytics_session_id', v); return v; })();
+  const userId = Number(localStorage.getItem('demo_user_id') || 1);
+  let es = null, guideStartAt = null, idleTimer = null, conciseMode = false;
+  let currentBubble = null, currentText = '', teamCode = '', isLeader = false, lastStepTs = 0;
+
+  function bubble(text, type='ai', mode='narration') {
+    const wrap = document.createElement('div');
+    wrap.className = type === 'user' ? 'flex justify-end' : 'flex justify-start';
+    const style = type === 'user' ? 'bg-[#C43C3C] text-white rounded-tr-sm' : (mode === 'qa' ? 'bg-[#fff7f2] border-[#C43C3C]/40 rounded-tl-sm' : 'bg-white border-[#E7E2D9] rounded-tl-sm');
+    wrap.innerHTML = `<div class="max-w-[82%] rounded-2xl border p-3 text-sm leading-7 ${style}">${text}</div>`;
+    chat.appendChild(wrap); chat.scrollTop = chat.scrollHeight;
+    return wrap.querySelector('div');
+  }
+
+  function showGrowth(msg){ if(!msg) return; document.getElementById('growthText').textContent = msg; document.getElementById('growthModal').classList.remove('hidden'); document.getElementById('growthModal').classList.add('flex'); }
+
+  async function track(event_name, properties={}) {
+    try {
+      const res = await fetch('/api/v1/analytics/track', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ event_name, properties, user_id:userId, session_id:sessionId }) });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.level_up_message) showGrowth(data.level_up_message);
+      if (data.next_goal_message) showGrowth(data.next_goal_message);
+      if (data.hidden_story) bubble(data.hidden_story, 'ai', 'qa');
+      return data;
+    } catch (_) { return null; }
+  }
+  track('page_view', { page_name: 'guide' });
+
+  function resetIdle() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { bubble('需要我继续讲吗？', 'ai', 'qa'); }, 30000);
+  }
+
+  function closeStream(){ if(es){es.close(); es=null;} }
+
+  async function syncStep(step){
+    if (!teamCode || !isLeader) return;
+    await fetch('/api/v1/team/progress', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ team_code: teamCode, leader_user_id: userId, step }) });
+  }
+
+  function startStream({ userInput = '', mode = 'narration', fromSync = false } = {}) {
+    closeStream();
+    currentText = '';
+    currentBubble = bubble('', 'ai', mode);
+    statusText.textContent = '生成中...';
+    const query = new URLSearchParams({ item_id:itemSelect.value, style:styleSelect.value, session_id:sessionId, user_input:userInput, user_id:userId, concise: conciseMode?'true':'false' }).toString();
+    es = new EventSource(`/api/v1/guide/generate?${query}`);
+
+    es.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+      if (data.text) { currentText += data.text; currentBubble.textContent = currentText; chat.scrollTop = chat.scrollHeight; }
+      if (data.is_complete) {
+        statusText.textContent = conciseMode ? '导览完成（精简模式）' : '导览完成';
+        posterBtn.classList.remove('hidden');
+        const durationSeconds = guideStartAt ? Math.max(1, Math.floor((Date.now() - guideStartAt)/1000)) : 0;
+        await track('guide_complete', { duration_seconds: durationSeconds, heritage_id: Number(itemSelect.value) });
+        if (teamCode && !fromSync) await syncStep({ ts: Date.now(), action: 'complete' });
+        closeStream();
+      }
+    };
+    es.onerror = () => { statusText.textContent = '网络波动，正在重连...'; closeStream(); };
+  }
+
+  startBtn.addEventListener('click', async () => {
+    guideStartAt = Date.now(); conciseMode = false;
+    posterBtn.classList.add('hidden'); posterPreview.classList.add('hidden');
+    bubble(`开始导览：${itemSelect.options[itemSelect.selectedIndex].text}`, 'user');
+    await track('guide_start', { heritage_id: Number(itemSelect.value) });
+    startStream({ mode: 'narration' });
+    resetIdle();
+    if (teamCode && isLeader) syncStep({ ts: Date.now(), action: 'start' });
+  });
+
+  askBtn.addEventListener('click', () => {
+    const q = questionInput.value.trim(); if (!q) return;
+    bubble(q, 'user'); questionInput.value = '';
+    startStream({ userInput:q, mode:'qa' }); resetIdle();
+    if (teamCode && isLeader) syncStep({ ts: Date.now(), action: 'ask', question: q });
+  });
+
+  createTeamBtn.addEventListener('click', async () => {
+    const res = await fetch('/api/v1/team/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ leader_user_id:userId, heritage_id:Number(itemSelect.value) }) });
+    const data = await res.json();
+    teamCode = data.team_code; isLeader = true; teamInfo.textContent = `组队码：${teamCode}（你是队长）`; teamCodeInput.value = teamCode;
+  });
+
+  joinTeamBtn.addEventListener('click', async () => {
+    const code = teamCodeInput.value.trim().toUpperCase(); if (!code) return;
+    const res = await fetch('/api/v1/team/join', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ team_code: code, member_user_id:userId }) });
+    if (!res.ok) return alert('组队码无效');
+    teamCode = code; isLeader = false; teamInfo.textContent = `已加入队伍 ${code}，等待队长同步导览`;
+  });
+
+  setInterval(async () => {
+    if (!teamCode || isLeader) return;
+    const res = await fetch(`/api/v1/team/progress/${teamCode}`); if (!res.ok) return;
+    const data = await res.json(); const step = data.step || {};
+    if (!step.ts || step.ts <= lastStepTs) return;
+    lastStepTs = step.ts;
+    if (step.action === 'start') startStream({ mode:'narration', fromSync:true });
+    if (step.action === 'ask') { bubble(`队长提问：${step.question}`, 'user'); startStream({ userInput: step.question, mode:'qa', fromSync:true }); }
+    if (step.action === 'complete') {
+      await track('team_complete', { team_code: teamCode });
+      bubble('🎖 组队完成，获得“知音”勋章', 'ai', 'qa');
+    }
+  }, 2500);
+
+  if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SR(); rec.lang = 'zh-CN'; rec.interimResults = false;
+    voiceBtn.addEventListener('click', () => rec.start());
+    rec.onresult = (e) => { questionInput.value = e.results[0][0].transcript; };
+  } else { voiceBtn.disabled = true; voiceBtn.textContent = '不支持'; }
+
+  chat.addEventListener('scroll', () => {
+    resetIdle();
+    if (chat.scrollTop > 400 && chat.scrollHeight - chat.clientHeight - chat.scrollTop > 300) {
+      conciseMode = true; statusText.textContent = '检测到快速浏览，已启用精简讲解';
+    }
+  });
+
+  posterBtn.addEventListener('click', async () => {
+    posterLoading.classList.remove('hidden');
+    try {
+      const res = await fetch('/api/v1/generate/poster-image', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id:userId, heritage_id:Number(itemSelect.value), template_style:'国风' }) });
+      if (!res.ok) throw new Error('fail');
+      const data = await res.json();
+      posterImg.src = data.image_url + '?t=' + Date.now(); savePosterBtn.href = data.image_url; posterPreview.classList.remove('hidden');
+      await track('poster_generate', { template_style: '国风' });
+    } finally { posterLoading.classList.add('hidden'); }
+  });
+
+  sharePosterBtn.addEventListener('click', async () => {
+    const url = posterImg.src; if (!url) return;
+    if (navigator.share) { try { await navigator.share({ title:'我的非遗纪念海报', url }); await track('poster_share', { share_channel: 'web_share' }); } catch (_) {} }
+    else { await navigator.clipboard.writeText(url); await track('poster_share', { share_channel:'copy_link' }); alert('已复制链接'); }
+  });
+
+  window.addEventListener('beforeunload', () => { closeStream(); if (idleTimer) clearTimeout(idleTimer); });
+</script>
+</body>
+</html>

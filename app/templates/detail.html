@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ item.name }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"></script>
+  <style>
+    .window-pattern { background-image: linear-gradient(90deg, rgba(196,60,60,.08) 1px, transparent 1px), linear-gradient(rgba(196,60,60,.08) 1px, transparent 1px); background-size: 18px 18px; }
+  </style>
+</head>
+<body class="bg-[#F9F6F0] text-gray-800">
+  <main class="mx-auto max-w-4xl px-4 py-6">
+    <div class="mb-4 flex items-center justify-between">
+      <a href="/themes" class="rounded-lg border border-[#E7E2D9] px-3 py-2 text-sm">返回主题页</a>
+      <button id="muteBtn" class="rounded-lg border border-[#E7E2D9] px-3 py-2 text-sm">🔊</button>
+    </div>
+    <article class="window-pattern rounded-3xl border border-[#E7E2D9] bg-white p-5 shadow-sm">
+      <img id="heroImage" src="{{ item.image_url or 'https://images.unsplash.com/photo-1456324504439-367cee3b3c32?auto=format&fit=crop&w=1200&q=80' }}" class="h-72 w-full rounded-2xl object-cover" />
+      <h1 class="mt-4 text-3xl font-bold text-[#C43C3C]">{{ item.name }}</h1>
+      <p class="mt-2 text-sm text-gray-500">{{ item.city }} · {{ item.category }}</p>
+      <p class="mt-4 leading-8">{{ item.description or item.summary }}</p>
+      <p class="mt-3 rounded-xl bg-[#F9F6F0] p-3 text-sm">工艺流程：{{ item.process }}</p>
+    </article>
+  </main>
+
+<script>
+  const muteBtn = document.getElementById('muteBtn');
+  let muted = localStorage.getItem('sound_muted') === '1';
+  Howler.mute(muted);
+  muteBtn.textContent = muted ? '🔇' : '🔊';
+  muteBtn.addEventListener('click', ()=>{ muted=!muted; Howler.mute(muted); localStorage.setItem('sound_muted', muted?'1':'0'); muteBtn.textContent=muted?'🔇':'🔊'; });
+
+  // 云锦页面背景织机声
+  if ('{{ item.name }}'.includes('云锦')) {
+    const loom = new Howl({ src: ['https://cdn.pixabay.com/download/audio/2022/03/15/audio_224341f9f8.mp3?filename=industry-ambient-110455.mp3'], loop: true, volume: 0.12 });
+    loom.play();
+    window.addEventListener('beforeunload', ()=> loom.stop());
+  }
+
+  // 共享过渡：从首页/主题点击卡片飞入详情图
+  const trans = JSON.parse(localStorage.getItem('heritage_transition') || 'null');
+  if (trans && trans.id === {{ item.id }}) {
+    const hero = document.getElementById('heroImage');
+    const rect = hero.getBoundingClientRect();
+    const clone = document.createElement('img');
+    clone.src = trans.img;
+    clone.style.cssText = `position:fixed;left:${trans.left}px;top:${trans.top}px;width:${trans.width}px;height:${trans.height}px;z-index:9999;border-radius:14px;object-fit:cover;`;
+    document.body.appendChild(clone);
+    hero.style.opacity = 0;
+    gsap.to(clone, { left: rect.left, top: rect.top, width: rect.width, height: rect.height, duration: 0.55, ease: 'power2.out', onComplete(){ hero.style.opacity = 1; clone.remove(); localStorage.removeItem('heritage_transition'); } });
+  }
+</script>
+</body>
+</html>
